@@ -1,44 +1,35 @@
-# 安卓SDK说明文档
-
+# 安卓SDK说明文档 
 *每次替换新的aar时首先要Sync Project with Gradle Files*
-
 ## 一、文档简介
-
-### 文档目的
-
-为方便Android端APP与戒指通讯进行二次开发 ，特对通讯协议进行封装 ，以达到简洁明了 ，让开发者不需要关注与戒指通讯层 ，专注业务逻辑交互层面开发。
-
-### 适用范围
-
-本SDK基于安卓原生开发 ，最终提供为aar包库。可用于Android环境下使用。  
-**注：使用开发语言为JAVA**
-
+### 1.文档目的
+提供SDK为开发者将智能戒指的功能集成进Android APP。本SDK对低功耗蓝牙、智能戒指通讯协议、生理算法进行了封装，使开发者更加专注产品的业务逻辑和交互的开发。
+### 2.适用范围
+智能穿戴APP安卓开发工程师，测试工程师，产品经理。  
 ### 功能介绍
-
 <table>
 <thead>
 <tr>
 <th align="left">功能模块</th>
 <th align="left">说明</th>
-<th align="left">相关文档</th>
+<th align="left">API</th>
 </tr>
 </thead>
 <tbody><tr>
-<th align="left" rowspan="3" nowrap="nowrap">蓝牙基础模块</th>
-<td align="left">蓝牙的开关操作</td>
+<th align="left" rowspan="3" nowrap="nowrap">低功耗蓝牙</th>
+<td align="left">打开关闭</td>
 <td align="left"></td>
 </tr>
 <tr>
-<td align="left">蓝牙的搜索链接操作</td>
+<td align="left">发现设备</td>
 <td align="left"></td>
 </tr>
 </tr>
 <tr>
-<td align="left">蓝牙的数据写入监听操作</td>
+<td align="left">读写特征值(数据收发)</td>
 <td align="left"></td>
 </tr>
 <tr>
-<th align="left" rowspan="14" nowrap="nowrap">通讯协议模块</th>
+<th align="left" rowspan="14" nowrap="nowrap">戒指通讯协议</th>
 <td align="left">时间管理</td>
 <td align="left"></td>
 </tr>
@@ -98,30 +89,23 @@
 </tbody></table>
 
 ## 二、快速入门概览
-
-### 前置条件
-
+### 1.移植环境要求
+* SDK库格式：AAR
+* 开发语言：JAVA
 * Android系统环境 ，系统版本>=8.0
 * 必须支持蓝牙5.0
 * 使用语言须可以调用aar包
-
-### 使用流程
-
+### 2.使用流程
 按以下流程使用 SDK：  
 第—步：集成 SDK  
 第二步：初始化 SDK  
 第三步：使用 SDK  
-### ChipletRing公版app蓝牙操作流程
-ChipletRing公版app已经将sdk指令完整集成，现在将流程图提供给开发者，方便集成时参考
-### 流程图
-
+### 3.公版APP
+ChipletRing公版APP已经在应用宝上架，此版本将sdk指令完整集成，开发流程图如下：
 ![SDK使用流程图](image/ChipletRing公版app蓝牙操作流程.png)
-
 ### 广播相关代码
 ```java
 BLEUtils.startLeScan(this, leScanCallback);
-
-
  private BluetoothAdapter.LeScanCallback leScanCallback = new BluetoothAdapter.LeScanCallback() {
 
         @Override
