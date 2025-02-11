@@ -2,10 +2,10 @@
 *每次替换新的aar时首先要Sync Project with Gradle Files*
 ## 一、文档简介
 ### 1.文档目的
-提供SDK为开发者将智能戒指的功能集成进Android APP。本SDK对低功耗蓝牙、智能戒指通讯协议、生理算法进行了封装，使开发者更加专注产品的业务逻辑和交互的开发。
+提供SDK为开发者将智能戒指的功能移植进自己的APP。本SDK对低功耗蓝牙、智能戒指通讯协议、生理算法进行了封装，使开发者更加专注产品的业务逻辑和交互的开发。
 ### 2.适用范围
-智能穿戴APP安卓开发工程师，测试工程师，产品经理。  
-### 功能介绍
+具有智能穿戴APP需求的安卓开发工程师，测试工程师，产品经理。  
+### 3.功能列表
 <table>
 <thead>
 <tr>
@@ -89,25 +89,19 @@
 </tbody></table>
 
 ## 二、快速入门概览
-### 1.移植环境要求
+### 1.环境要求
 * SDK库格式：AAR
 * 开发语言：JAVA
 * Android系统环境 ，系统版本>=8.0
 * 必须支持蓝牙5.0
-* 使用语言须可以调用aar包
-### 2.使用流程
-按以下流程使用 SDK：  
-第—步：集成 SDK  
-第二步：初始化 SDK  
-第三步：使用 SDK  
-### 3.公版APP
+### 2.公版APP
 ChipletRing公版APP已经在应用宝上架，此版本将sdk指令完整集成，开发流程图如下：
 ![SDK使用流程图](image/ChipletRing公版app蓝牙操作流程.png)
-### 广播相关代码
+## 三、API接口
+### 1.低功耗蓝牙发现设备
 ```java
 BLEUtils.startLeScan(this, leScanCallback);
  private BluetoothAdapter.LeScanCallback leScanCallback = new BluetoothAdapter.LeScanCallback() {
-
         @Override
         public void onLeScan(BluetoothDevice device, int rssi, byte[] bytes) {
             if (device == null || StringUtils.isEmpty(device.getName())) {
@@ -127,12 +121,9 @@ BLEUtils.startLeScan(this, leScanCallback);
             }
             DeviceBean bean = new DeviceBean(device, rssi);
             bean.setHidDevice(isHIDDevice ? "1" : "0");
-
             if (BluetoothState.isNeedRing(bytes)) {
-
                 DeviceBean bean1 = BluetoothState.getInfoByByte(bytes);
                 if (bean1 != null) {
-
                     bean.setCommunicationProtocolVersion(bean1.getCommunicationProtocolVersion());
                     bean.setBindingIndicatorBit(bean1.getBindingIndicatorBit());
                     bean.setChargingIndicator(bean1.getChargingIndicator());
@@ -522,21 +513,10 @@ public class BleAdParse {
 
 }
 ```
-
-## 三、集成ChipletRing APP SDK
-
-### 1.集成ChipletRing APP SDK
-
-#### 1.1 集成方式
-
-##### 1.1.1 获取到ChipletRing APP SDK的aar文件
-
-##### 1.1.2 将aar包放在libs目录下
-
-##### 1.1.3 配置所需权限 ，如需存储以及其他权限可自行配置 ，牵扯到动态权限处 ，需要做相关处理  
-
-在Manifest.xml中加入以下代码
-
+## 四、移植步骤
+### 1.库文件添加
+1.获取到ChipletRing APP SDK的aar文件，放在libs目录下。
+2.配置所需权限，牵扯到动态权限处 ，需要做相关处理，在Manifest.xml中加入以下代码:
 ```xml
 <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
 <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
@@ -544,18 +524,14 @@ public class BleAdParse {
 <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 ```
-
-### 2.初始化ChipletRing APP SDK
-
-#### 2.1.1 在Application的onCreate方法中进行初始化
-
+### 2.初始化库
+1.在Application的onCreate方法中进行初始化
 ```java
 LmAPI.init(this);
 LmAPI.setDebug(true);
 ```
-
-#### 2.1.2 在BaseActivity类中 ，启用监听 ，该监听用于监听蓝牙连接状态以及戒指基础指令反馈的数据
-
+2.在BaseActivity类中启用监听，该监听用于监听蓝牙连接状态和戒指的应答
+**注：若重复调用监听LmAPI.addWLSCmdListener(this, this)会出现重复现象**
 ```java
 LmAPI.addWLSCmdListener(this, this);
 // 监视蓝牙设备与APP连接的状态
@@ -564,7 +540,6 @@ intentFilter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
 intentFilter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
 intentFilter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
 registerReceiver(broadcastReceiver,intentFilter);
-
 //使用蓝牙之前，先申请去权限
 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
     if (!checkPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_ADVERTISE})) {
@@ -577,7 +552,6 @@ if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 }).show();
         return;
     }
-
 } else {
     if (!checkPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION})) {
         new XPopup.Builder(this).asConfirm(getRsString(R.string.hint), getString(R.string.localtion_auth),
@@ -591,20 +565,13 @@ if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
     }
 }
 ```
-
-**注：若重复调用监听LmAPI.addWLSCmdListener(this, this)会出现重复现象**
-
-### 3、使用ChipletRing APP SDK
-
+### 3、库的使用
 #### 3.0 接口使用示意图
-
 #### 3.0.1 绑定流程图
-
 ![绑定](image/戒指绑定.png)
-
 #### 3.0.2 解绑流程图
-
-**绑定与解绑：**<span style="color:yellow;">ChipletRing的逻辑：绑定戒指即账户首次连接戒指时，戒指支持一代协议，需要调用清除历史数据接口，同步时间接口，获取软硬件版本号接口，链式调用，每个接口在上一个完成后等待一定时间调用。戒指支持二代协议，调用LmAPI.APP_BIND()，复合操作，戒指收到这条指令执行，恢复出厂设置（清空历史记录，清除步数)，同步时间，HID功能获取。<br>解绑是指账户解除和戒指的绑定，解绑时只需要断开蓝牙即可</span>
+图片为空
+ChipletRing的逻辑：绑定戒指即账户首次连接戒指时，戒指支持一代协议，需要调用清除历史数据接口，同步时间接口，获取软硬件版本号接口，链式调用，每个接口在上一个完成后等待一定时间调用。戒指支持二代协议，调用LmAPI.APP_BIND()，复合操作，戒指收到这条指令执行，恢复出厂设置（清空历史记录，清除步数)，同步时间，HID功能获取。解绑是指账户解除和戒指的绑定，解绑时只需要断开蓝牙即可。
 
 #### 3.0.1 连接流程图
 
