@@ -5,7 +5,7 @@
 提供SDK为开发者将智能戒指的功能移植进自己的APP。本SDK对低功耗蓝牙、智能戒指通讯协议、生理算法进行了封装，使开发者更加专注产品的业务逻辑和交互的开发。
 ### 2.适用范围
 具有智能穿戴APP需求的安卓开发工程师，测试工程师，产品经理。  
-### 3.功能列表
+### 3.API列表
 <table>
 <thead>
 <tr>
@@ -29,7 +29,7 @@
 <td align="left"></td>
 </tr>
 <tr>
-<th align="left" rowspan="14" nowrap="nowrap">戒指通讯协议</th>
+<th align="left" rowspan="15" nowrap="nowrap">戒指通讯协议</th>
 <td align="left">时间管理</td>
 <td align="left"></td>
 </tr>
@@ -86,8 +86,13 @@
 <td align="left"></td>
 </tr>
 <tr>
+<td align="left">OTA升级</td>
+<td align="left"></td>
+</tr>
+<tr>
 </tbody></table>
 
+详细说明参考第三章。
 ## 二、快速入门概览
 ### 1.环境要求
 * SDK库格式：AAR
@@ -95,10 +100,166 @@
 * Android系统环境 ，系统版本>=8.0
 * 必须支持蓝牙5.0
 ### 2.公版APP
-ChipletRing公版APP已经在应用宝上架，此版本将sdk指令完整集成，开发流程图如下：
+ChipletRing公版APP已经在应用宝上架，此版本将sdk指令完整集成，开发流程图如下，同时也推荐开发者先详细看一下此流程图：
 ![SDK使用流程图](image/ChipletRing公版app蓝牙操作流程.png)
-## 三、API接口
-### 1.低功耗蓝牙发现设备
+### 3.使用场景
+戒指是否支持一二代协议，需要从广播中获取。支持二代协议的戒指，一定支持一代协议。如何判断协议版本请参考《广播解析》小章节。
+#### 1.绑定流程图
+![绑定](image/戒指绑定.png)
+绑定即APP首次连接戒指时进行的操作。需要区分两种情况：
+第一种是戒指仅支持一代协议，需要依次调用清除历史数据，同步时间，获取软硬件版本号，清空当前步数，获取支持的HID功能，每个接口在上一个完成后等待一定时间调用。比较耗时复杂，目前不再推荐使用。
+第二种是戒指支持二代协议，连接成功后直接调用LmAPI.APP_BIND()，戒指收到这条指令执行后，自动执行恢复出厂设置（清空历史记录，清除步数），同步时间，HID功能获取。
+#### 2.解绑流程图
+图片为空。
+解绑是指APP解除和戒指的绑定。需要区分两种情况：
+第一种是戒指仅支持一代协议，解绑时需要判断戒指是否和手机进行配对，如果配对需要解除配对后，断开蓝牙。
+第二种是戒指支持二代协议，解绑时需要判断戒指是否和手机进行配对，如果配对需要解除配对后，发送解绑指令后蓝牙断开。此处的用意是戒指将进入低功耗模式。
+#### 3.连接流程图
+![连接](image/戒指重连.png)
+连接是指APP和戒指绑定之后，重新打开APP进行的操作。需要区分两种情况：
+第一种是戒指仅支持一代协议，需要依次调用同步时间，获取软硬件版本号，获取当前步数，获取HID功能配置，获取未上传的历史记录的接口。比较耗时复杂，目前不再推荐使用。
+第二种是戒指支持二代协议，连接成功后直接调用LmAPI.APP_CONNECT()。实现组合操作：同步时间，获取软硬件版本号，获取当前步数，获取HID功能配置，获取未上传的历史记录。
+#### 4.重连流程图
+![重连](image/戒指重连.png)
+在手机和戒指连接的过程中，可能由于电磁干扰或者距离远因素，连接是有几率断开的，此时需要实时监听断连回调，及时进行复连操作，操作流程参考连接流程。
+#### 5.刷新流程图
+![刷新](image/戒指刷新.png)   
+刷新是指APP和戒指连接中，下拉APP进行刷新数据的操作。需要区分两种情况：
+第一种是戒指仅支持一代协议，需要依次调用同步时间，获取当前步数，获取未上传的历史记录的接口。比较耗时复杂，目前不再推荐使用。
+第二种是戒指支持二代协议，直接调用LmAPI.APP_REFRESH()。实现组合操作：同步时间，获取当前步数，获取未上传的历史记录。
+## 三、移植步骤
+### 1.库文件添加
+1.获取到ChipletRing APP SDK的aar文件，放在libs目录下。
+2.配置所需权限，牵扯到动态权限处 ，需要做相关处理，在Manifest.xml中加入以下代码:
+```xml
+<uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+<uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+```
+### 2.初始化库
+1.在Application的onCreate方法中进行初始化
+```java
+LmAPI.init(this);
+LmAPI.setDebug(true);
+```
+2.在BaseActivity类中启用监听，该监听用于监听蓝牙连接状态和戒指的应答
+**注：若重复调用监听LmAPI.addWLSCmdListener(this, this)会出现重复现象**
+```java
+LmAPI.addWLSCmdListener(this, this);
+// 监视蓝牙设备与APP连接的状态
+IntentFilter intentFilter = new IntentFilter();
+intentFilter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
+intentFilter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
+intentFilter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
+registerReceiver(broadcastReceiver,intentFilter);
+//使用蓝牙之前，先申请去权限
+if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+    if (!checkPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_ADVERTISE})) {
+        new XPopup.Builder(this).asConfirm(getRsString(R.string.hint), getString(R.string.localtion_auth),
+                new OnConfirmListener() {
+                    @Override
+                    public void onConfirm() {
+                        requestPermission(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_ADVERTISE}, 100);
+                    }
+                }).show();
+        return;
+    }
+} else {
+    if (!checkPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION})) {
+        new XPopup.Builder(this).asConfirm(getRsString(R.string.hint), getString(R.string.localtion_auth),
+                new OnConfirmListener() {
+                    @Override
+                    public void onConfirm() {
+                        requestPermission(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION}, 100);
+                    }
+                }).show();
+        return;
+    }
+}
+```
+### 3、库的使用
+#### 3.1 蓝牙操作
+此类是使用蓝牙搜索、连接、 断开的公共类 ，统一由IResponseListener接口反馈。 
+##### 3.1.1 搜索设备
+接口功能：开启蓝牙发现，发现周围的蓝牙设备并获取其广播的数据，解析广播数据判断是否符合智能戒指的广播格式，如果符合则从广播数据中获取配置信息。
+接口声明：
+```java
+BLEUtils.startLeScan(Context context, BluetoothAdapter.LeScanCallback leScanCallback);
+```
+参数说明：context：上下文     leScanCallback：蓝牙搜索的回调  
+返回值
+```jave
+（void onLeScan(BluetoothDevice device, int rssi, byte[] bytes)）
+```
+该接口的返回值说明如下：
+```java
+private BluetoothAdapter.LeScanCallback leScanCallback = new BluetoothAdapter.LeScanCallback() {
+    @Override
+    public void onLeScan(BluetoothDevice device, int rssi, byte[] bytes) {
+        //处理搜索到的设备
+    }
+};
+```
+注意事项：在开发者调试时候，发现不到设备的情况下，可用公版APP进行绑定对比测试，一般情况下，戒指正常的话，手机靠近戒指，RSSI的值大于-60。
+##### 3.1.2 停止搜索
+接口功能：蓝牙连接以后，可以关闭蓝牙搜索功能。  
+接口声明：
+```java
+BLEUtils.stopLeScan(Context context, BluetoothAdapter.LeScanCallback leScanCallback);
+```
+参数说明：context：上下文    leScanCallback：蓝牙搜索的回调  
+返回值：无
+
+##### 3.1.3 连接设备
+
+接口功能：发起连接蓝牙设备。
+接口声明：
+```java
+BLEUtils.connectLockByBLE(Context context, BluetoothDevice bluetoothDevice);
+```
+参数说明：context：上下文  
+bluetoothDevice ：蓝牙设备  
+返回值：
+```java
+@Override
+public void lmBleConnecting(int code) {
+    //正在连接
+}
+@Override
+public void lmBleConnectionSucceeded(int code) {
+    //连接成功
+}
+@Override
+public void lmBleConnectionFailed(int code) {
+    //连接失败
+}
+```
+##### 3.1.4 断开蓝牙
+接口功能：断开设备。  
+接口声明：
+
+```java
+BLEUtils.disconnectBLE(Context context);
+```
+参数说明：context：上下文  
+返回值：无
+##### 3.1.5 蓝牙重连
+接口功能：在戒指连接断开时，重连设备，重连比连接速度要快
+接口声明：
+```java
+        BluetoothDevice remote  = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(mac);
+                if(remote != null){
+                    BLEUtils.connectLockByBLE(this,remote);
+                }
+```
+参数说明：mac：戒指mac地址   
+返回值：无    
+#### 3.2 通讯协议
+此类是使用戒指功能的公共类，戒指的功能通过该类直接调用即可,数据反馈除了特殊说明外 统一由IResponseListener接口反馈。
+调用此类的接口 ，需保证与戒指处于连接状态  
+##### 3.2.0 广播解析
 ```java
 BLEUtils.startLeScan(this, leScanCallback);
  private BluetoothAdapter.LeScanCallback leScanCallback = new BluetoothAdapter.LeScanCallback() {
@@ -128,8 +289,6 @@ BLEUtils.startLeScan(this, leScanCallback);
                     bean.setBindingIndicatorBit(bean1.getBindingIndicatorBit());
                     bean.setChargingIndicator(bean1.getChargingIndicator());
                 }
-
-
                 if (dataEntityList.contains(device)) {
                     return;
                 }
@@ -187,7 +346,6 @@ BLEUtils.startLeScan(this, leScanCallback);
             //支持二代指令协议
             bean.setCommunicationProtocolVersion(2);
         }
-
         return bean;
     }
 
@@ -197,7 +355,6 @@ BLEUtils.startLeScan(this, leScanCallback);
             return false;
         }
         String hexString = ConvertUtils.bytes2HexString(bytes);
-
         if (hexString.length() < 5) {
             return false;
         }
@@ -355,9 +512,6 @@ public class ParsedAd {
 }
 
 public class BleAdParse {
-
-
-
     public static String byte2hex(byte[] b) {
         StringBuilder hs = new StringBuilder();
         String stmp;
@@ -374,302 +528,76 @@ public class BleAdParse {
 
 
     public static ParsedAd parseScanRecodeData(ParsedAd parsedAd ,byte[] adv_data) {
-
         ByteBuffer buffer = ByteBuffer.wrap(adv_data).order(ByteOrder.LITTLE_ENDIAN);
-
         while (buffer.remaining() > 2) {
-
             byte length = buffer.get();
-
             if (length == 0)
-
                 break;
-
             if (length>buffer.remaining())
-
                 break;
 
             byte type = buffer.get();
-
             length -= 1;
-
             switch (type) {
-
                 case 0x01: // Flags
-
                     parsedAd.flags = buffer.get();
-
                     length--;
-
                     break;
-
                 case 0x02: // Partial list of 16-bit UUIDs
-
                 case 0x03: // Complete list of 16-bit UUIDs
-
                 case 0x14: // List of 16-bit Service Solicitation UUIDs
-
                     while (length >= 2) {
-
-                        parsedAd.uuids.add(UUID.fromString(String.format(
-
-                                "%08x-0000-1000-8000-00805f9b34fb", buffer.getShort())));
-
+                        parsedAd.uuids.add(UUID.fromString(String.format("%08x-0000-1000-8000-00805f9b34fb", buffer.getShort())));
                         length -= 2;
-
                     }
-
                     break;
-
                 case 0x04: // Partial list of 32 bit service UUIDs
-
                 case 0x05: // Complete list of 32 bit service UUIDs
-
                     while (length >= 4) {
-
-                        parsedAd.uuids.add(UUID.fromString(String.format(
-
-                                "%08x-0000-1000-8000-00805f9b34fb", buffer.getInt())));
-
+                        parsedAd.uuids.add(UUID.fromString(String.format("%08x-0000-1000-8000-00805f9b34fb", buffer.getInt())));
                         length -= 4;
-
                     }
-
                     break;
-
                 case 0x06: // Partial list of 128-bit UUIDs
-
                 case 0x07: // Complete list of 128-bit UUIDs
-
                 case 0x15: // List of 128-bit Service Solicitation UUIDs
-
                     while (length >= 16) {
-
                         long lsb = buffer.getLong();
-
                         long msb = buffer.getLong();
-
                         UUID uuid=new UUID(msb, lsb);
-
                         parsedAd.uuids.add(uuid);
-
                         length -= 16;
-
                     }
-
                     break;
-
                 case 0x08: // Short local device name
-
                 case 0x09: // Complete local device name
-
                     byte sb[] = new byte[length];
-
                     buffer.get(sb, 0, length);
-
                     length = 0;
-
                     parsedAd.localName = new String(sb).trim();
-
                     break;
-
                 case (byte) 0xFF: // Manufacturer Specific Data
-
                     byte sb2[] = new byte[length];
-
                     buffer.get(sb2, 0, length);
-
                     length = 0;
-
                     parsedAd.diyInfo = byte2hex(sb2);;
-
                     break;
-
                 default: // skip
-
                     break;
-
             }
 
             if (length > 0) {
-
                 if ((buffer.position()+length)<buffer.capacity()){
-
                     buffer.position(buffer.position() + length);
-
                 }else {
-
                     buffer.position(buffer.capacity());
-
                 }
-
             }
-
         }
-
         return parsedAd;
-
     }
-
 }
 ```
-## 四、移植步骤
-### 1.库文件添加
-1.获取到ChipletRing APP SDK的aar文件，放在libs目录下。
-2.配置所需权限，牵扯到动态权限处 ，需要做相关处理，在Manifest.xml中加入以下代码:
-```xml
-<uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
-<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-<uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
-<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-```
-### 2.初始化库
-1.在Application的onCreate方法中进行初始化
-```java
-LmAPI.init(this);
-LmAPI.setDebug(true);
-```
-2.在BaseActivity类中启用监听，该监听用于监听蓝牙连接状态和戒指的应答
-**注：若重复调用监听LmAPI.addWLSCmdListener(this, this)会出现重复现象**
-```java
-LmAPI.addWLSCmdListener(this, this);
-// 监视蓝牙设备与APP连接的状态
-IntentFilter intentFilter = new IntentFilter();
-intentFilter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
-intentFilter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
-intentFilter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
-registerReceiver(broadcastReceiver,intentFilter);
-//使用蓝牙之前，先申请去权限
-if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-    if (!checkPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_ADVERTISE})) {
-        new XPopup.Builder(this).asConfirm(getRsString(R.string.hint), getString(R.string.localtion_auth),
-                new OnConfirmListener() {
-                    @Override
-                    public void onConfirm() {
-                        requestPermission(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_ADVERTISE}, 100);
-                    }
-                }).show();
-        return;
-    }
-} else {
-    if (!checkPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION})) {
-        new XPopup.Builder(this).asConfirm(getRsString(R.string.hint), getString(R.string.localtion_auth),
-                new OnConfirmListener() {
-                    @Override
-                    public void onConfirm() {
-                        requestPermission(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION}, 100);
-                    }
-                }).show();
-        return;
-    }
-}
-```
-### 3、库的使用
-#### 3.1 使用场景
-戒指是否支持一二代协议，需要从广播中获取。支持二代协议的戒指，一定支持一代协议。
-##### 1.绑定流程图
-![绑定](image/戒指绑定.png)
-绑定即APP首次连接戒指时进行的操作。需要区分两种情况：
-第一种是戒指仅支持一代协议，需要依次调用清除历史数据，同步时间，获取软硬件版本号，清空当前步数，获取支持的HID功能，每个接口在上一个完成后等待一定时间调用。比较耗时复杂，目前不再推荐使用。
-第二种是戒指支持二代协议，连接成功后直接调用LmAPI.APP_BIND()，戒指收到这条指令执行后，自动执行恢复出厂设置（清空历史记录，清除步数），同步时间，HID功能获取。
-##### 2.解绑流程图
-图片为空。
-解绑是指APP解除和戒指的绑定。需要区分两种情况：
-第一种是戒指仅支持一代协议，解绑时需要判断戒指是否和手机进行配对，如果配对需要解除配对后，断开蓝牙。
-第二种是戒指支持二代协议，解绑时需要判断戒指是否和手机进行配对，如果配对需要解除配对后，发送解绑指令后蓝牙断开。此处的用意是戒指将进入低功耗模式。
-##### 3.连接流程图
-![连接](image/戒指重连.png)
-连接是指APP和戒指绑定之后，重新打开APP进行的操作。需要区分两种情况：
-第一种是戒指仅支持一代协议，需要依次调用同步时间，获取软硬件版本号，获取当前步数，获取HID功能配置，获取未上传的历史记录的接口。比较耗时复杂，目前不再推荐使用。
-第二种是戒指支持二代协议，连接成功后直接调用LmAPI.APP_CONNECT()。实现组合操作：同步时间，获取软硬件版本号，获取当前步数，获取HID功能配置，获取未上传的历史记录。
-##### 4.重连流程图
-![重连](image/戒指重连.png)
-在手机和戒指连接的过程中，可能由于电磁干扰或者距离远因素，连接是有几率断开的，此时需要实时监听断连回调，及时进行复连操作，操作流程参考连接流程。
-##### 5.刷新流程图
-![刷新](image/戒指刷新.png)   
-刷新是指APP和戒指连接中，下拉APP进行刷新数据的操作。需要区分两种情况：
-第一种是戒指仅支持一代协议，需要依次调用同步时间，获取当前步数，获取未上传的历史记录的接口。比较耗时复杂，目前不再推荐使用。
-第二种是戒指支持二代协议，直接调用LmAPI.APP_REFRESH()。实现组合操作：同步时间，获取当前步数，获取未上传的历史记录。
-#### 3.2 蓝牙操作
-此类是使用蓝牙搜索、连接、 断开的公共类 ，统一由IResponseListener接口反馈。 
-##### 3.2.1 搜索设备
-接口功能：开启蓝牙发现，发现周围的蓝牙设备并获取其广播的数据，解析广播数据判断是否符合智能戒指的广播格式，如果符合则从广播数据中获取配置信息。
-接口声明：
-```java
-BLEUtils.startLeScan(Context context, BluetoothAdapter.LeScanCallback leScanCallback);
-```
-参数说明：context：上下文     leScanCallback：蓝牙搜索的回调  
-返回值
-```jave
-（void onLeScan(BluetoothDevice device, int rssi, byte[] bytes)）
-```
-该接口的返回值说明如下：
-```java
-private BluetoothAdapter.LeScanCallback leScanCallback = new BluetoothAdapter.LeScanCallback() {
-    @Override
-    public void onLeScan(BluetoothDevice device, int rssi, byte[] bytes) {
-        //处理搜索到的设备
-    }
-};
-```
-注意事项：在开发者调试时候，发现不到设备的情况下，可用公版APP进行绑定对比测试，一般情况下，戒指正常的话，手机靠近戒指，RSSI的值大于-60。
-##### 3.2.2 停止搜索
-接口功能：蓝牙连接以后，可以关闭蓝牙搜索功能。  
-接口声明：
-```java
-BLEUtils.stopLeScan(Context context, BluetoothAdapter.LeScanCallback leScanCallback);
-```
-参数说明：context：上下文    leScanCallback：蓝牙搜索的回调  
-返回值：无
-
-##### 3.2.3 连接设备
-
-接口功能：发起连接蓝牙设备。
-接口声明：
-```java
-BLEUtils.connectLockByBLE(Context context, BluetoothDevice bluetoothDevice);
-```
-参数说明：context：上下文  
-bluetoothDevice ：蓝牙设备  
-返回值：
-```java
-@Override
-public void lmBleConnecting(int code) {
-    //正在连接
-}
-@Override
-public void lmBleConnectionSucceeded(int code) {
-    //连接成功
-}
-@Override
-public void lmBleConnectionFailed(int code) {
-    //连接失败
-}
-```
-##### 3.1.4 断开蓝牙
-接口功能：断开设备。  
-接口声明：
-
-```java
-BLEUtils.disconnectBLE(Context context);
-```
-参数说明：context：上下文  
-返回值：无
-##### 3.1.5 蓝牙重连
-接口功能：在戒指连接断开时，重连设备，重连比连接速度要快
-接口声明：
-```java
-        BluetoothDevice remote  = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(mac);
-                if(remote != null){
-                    BLEUtils.connectLockByBLE(this,remote);
-                }
-```
-参数说明：mac：戒指mac地址   
-返回值：无    
-#### 3.2 通讯协议
-此类是使用戒指功能的公共类，戒指的功能通过该类直接调用即可,数据反馈除了特殊说明外 统一由IResponseListener接口反馈。
-调用此类的接口 ，需保证与戒指处于连接状态  
 ##### 3.2.1 同步时间
 接口功能：调用此接口会获取手机当前时间同步给戒指。  
 接口声明：
